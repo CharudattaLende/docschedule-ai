@@ -4,7 +4,6 @@
 
 DocSchedule AI is an automation project that helps users register as patients, discover doctors, check appointment availability, book appointments, and manage existing bookings through a conversational Telegram interface.
 
-![DocSchedule AI Banner](assets/docschedule-banner.png)
 
 ## 🤖 Live Demo
 
