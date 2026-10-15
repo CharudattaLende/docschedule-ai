@@ -1,0 +1,692 @@
+{
+  "name": "Doctor Appointment Telegram Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "81d190e0-e90d-4202-9b23-64ea33b266e7",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        112
+      ],
+      "webhookId": "d652842c-8dc7-4ff2-a8e4-b46bc3dfbcdd",
+      "credentials": {
+        "telegramApi": {
+          "id": "oF9bZ4KY9wmKXX45",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Trusted Telegram user ID: {{ $json.message.from.id }}\nCurrent date/time (Asia/Kolkata): {{ $now.setZone(\"Asia/Kolkata\").toFormat(\"yyyy-MM-dd HH:mm, cccc\") }}\n\nPatient message: {{ $json.message.text ?? \"[The user sent a non-text message such as a photo, sticker, voice note or file. Politely say you can only read text messages.]\" }}",
+        "options": {
+          "systemMessage": "You are a polite and reliable doctor appointment booking assistant.\n\nYour responsibility is to help patients register, find doctors, check availability, book appointments, view bookings, reschedule appointments, and cancel appointments.\n\nUse the connected tools to retrieve real information and perform requested operations. Available tools: get_doctor_config, get_patient, register_patient, get_available_appointments, book_appointment, get_all_appointments, reschedule_appointment, cancel_appointment. Call get_patient first; if the patient is not registered, collect full name and phone one question at a time and call register_patient. Every tool returns a status field; only report success when status is SUCCESS or FOUND. For book, reschedule and cancel, read the returned message and relay it exactly. Appointment IDs must come from tool results.\n\nNever invent doctors, specialties, consultation fees, dates, times, available slots, patient records, or appointment IDs.\n\nAsk one clear question at a time when required information is missing.\n\nBefore booking, confirm the selected doctor, date, and time with the patient when necessary.\n\nNever claim that an appointment has been booked, cancelled, or rescheduled until the corresponding tool confirms that the database operation succeeded.\n\nUse the current Telegram user's identity for patient lookup and access control. Never trust an AI-generated user ID when the trusted trigger data is available. The trusted Telegram user ID is given at the start of every user message.\n\nDo not expose another patient's information.\n\nIf a requested slot is unavailable, retrieve actual alternatives and present them to the patient.\n\nIf a tool fails, explain that the operation could not be completed and do not claim success.\n\nDo not provide medical diagnoses, prescribe medication, or replace professional medical advice. For urgent or life-threatening symptoms, advise the user to contact local emergency services.\n\nUse clear, concise, friendly language. Reply in plain text only (no HTML or Markdown symbols), because it is sent through Telegram.\n\nTreat Google Sheets as the source of truth. Memory may help maintain conversational context, but it must never be used as proof that a booking exists.\n\nAll dates and times use the Asia/Kolkata timezone. Use date format YYYY-MM-DD and 24-hour time format HH:mm.",
+          "maxIterations": 10,
+          "enableStreaming": false
+        }
+      },
+      "id": "dd3da044-907d-44cd-9a2a-33ce2a9070d7",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.7-flash",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "ae2a8263-96fb-4875-99da-010fe4d67c2f",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        336
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ \"tg_\" + $(\"Telegram Trigger\").item.json.message.chat.id }}",
+        "contextWindowLength": 10
+      },
+      "id": "35a1efc9-6b86-4e62-ba9e-ab63a72ad4e5",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        368,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Lists active doctors with specialty, consultation fee, working days, hours and slot length. Optionally filter by specialty. Use for finding doctors and fees.",
+        "workflowId": {
+          "__rl": true,
+          "value": "zRHNNUTBQh56RfRX",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/zRHNNUTBQh56RfRX",
+          "cachedResultName": "Tool - Get Doctor Config"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "specialty": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('specialty', 'Medical specialty to filter by, e.g. Cardiologist. Leave empty to list all doctors.', 'string', '') }}"
+          },
+          "matchingColumns": [
+            "specialty"
+          ],
+          "schema": [
+            {
+              "id": "specialty",
+              "displayName": "specialty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "1c71d30a-a5dd-4795-b1c7-9dc155f87e27",
+      "name": "get_doctor_config",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Checks whether the current Telegram user is a registered patient and returns their patient record. Call this first in every conversation and before booking.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Vshbd8M2OHGob9DU",
+          "cachedResultName": "Tool - Get Patient"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_user_id": "={{ String($(\"Telegram Trigger\").first().json.message.from.id) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "dcf0673f-771f-407c-958c-526507fce142",
+      "name": "get_patient",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        608,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Registers the current Telegram user as a patient. Only call after the patient has given their full name and phone number. Refuses duplicates.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "zWIuDG74VO88dT1P",
+          "cachedResultName": "Tool - Register Patient"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_user_id": "={{ String($(\"Telegram Trigger\").first().json.message.from.id) }}",
+            "full_name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('full_name', 'Patient full name as typed by the patient') }}",
+            "phone": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('phone', 'Patient phone number, 10 to 15 digits') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "05009e70-0943-4a81-a62d-3b6d1b58c907",
+      "name": "register_patient",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Returns validated free appointment slots for a doctor or specialty on a date. Use for checking availability and for alternatives when a slot is taken.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "FZXrTTOdlQIgXBZ4",
+          "cachedResultName": "Tool - Get Available Appointments"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "doctor_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('doctor_id', 'Doctor ID such as D001. Leave empty if searching by specialty.', 'string', '') }}",
+            "specialty": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('specialty', 'Specialty such as Cardiologist. Leave empty if doctor_id is given.', 'string', '') }}",
+            "appointment_date": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('appointment_date', 'Date in YYYY-MM-DD format, Asia/Kolkata timezone') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "doctor_id",
+              "displayName": "doctor_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "specialty",
+              "displayName": "specialty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "appointment_date",
+              "displayName": "appointment_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "aa3e3823-f45f-4775-b408-69c03cdd32a9",
+      "name": "get_available_appointments",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        864,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Books an appointment for the current registered patient after validating doctor, working day, hours, past time and conflicts. Call only after the patient confirmed doctor, date and time.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "a5r8OKsfHEUwIUGG",
+          "cachedResultName": "Tool - Book Appointment"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_user_id": "={{ String($(\"Telegram Trigger\").first().json.message.from.id) }}",
+            "doctor_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('doctor_id', 'Doctor ID such as D001, taken from tool results') }}",
+            "appointment_date": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('appointment_date', 'Date in YYYY-MM-DD format') }}",
+            "appointment_time": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('appointment_time', 'Time in 24-hour HH:mm format, must be one of the free slots') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "doctor_id",
+              "displayName": "doctor_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "appointment_date",
+              "displayName": "appointment_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "appointment_time",
+              "displayName": "appointment_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "9f35bab0-e044-4391-b39a-13f23c845938",
+      "name": "book_appointment",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        992,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Lists the current Telegram user's own appointments with IDs. Upcoming active ones by default; set include_history to true only if the patient asks for past or cancelled ones.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "AE5UElXM7n5PZZYK",
+          "cachedResultName": "Tool - Get All Appointments"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_user_id": "={{ String($(\"Telegram Trigger\").first().json.message.from.id) }}",
+            "include_history": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('include_history', 'true only if the patient asks for history, past or cancelled appointments; otherwise false', 'string', 'false') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "include_history",
+              "displayName": "include_history",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "e63359d4-5716-4119-82b6-123eb8581c14",
+      "name": "get_all_appointments",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Moves one of the current user's active appointments to a new free slot with the same doctor. Needs the appointment ID. Call only after the patient confirmed the new date and time.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "TOIjKlqCkaVB01aB",
+          "cachedResultName": "Tool - Reschedule Appointment"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_user_id": "={{ String($(\"Telegram Trigger\").first().json.message.from.id) }}",
+            "appointment_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('appointment_id', 'Appointment ID such as A123, from get_all_appointments') }}",
+            "new_date": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('new_date', 'New date in YYYY-MM-DD format') }}",
+            "new_time": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('new_time', 'New time in 24-hour HH:mm format') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "appointment_id",
+              "displayName": "appointment_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "new_date",
+              "displayName": "new_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "new_time",
+              "displayName": "new_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "0104b2bc-fa8e-4964-8534-19484653618d",
+      "name": "reschedule_appointment",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1248,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Cancels one of the current user's appointments by setting status CANCELLED (history is kept). Needs the appointment ID; ask which one if several exist. Confirm with the patient first.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "z05hGDcrVxGPxj6z",
+          "cachedResultName": "Tool - Cancel Appointment"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_user_id": "={{ String($(\"Telegram Trigger\").first().json.message.from.id) }}",
+            "appointment_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('appointment_id', 'Appointment ID such as A123, from get_all_appointments') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "appointment_id",
+              "displayName": "appointment_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "id": "b42af933-a333-4526-93e2-10502d48b25f",
+      "name": "cancel_appointment",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1376,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $(\"Telegram Trigger\").item.json.message.chat.id }}",
+        "text": "={{ $json.output || \"Sorry, I could not process that request. Please try again in a moment.\" }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7b8b1e1b-db1b-4abe-88d1-584b258765b1",
+      "name": "Telegram Send Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        576,
+        112
+      ],
+      "webhookId": "46ae6c4f-cb6c-4b62-a5e6-7eddf83219c3",
+      "credentials": {
+        "telegramApi": {
+          "id": "oF9bZ4KY9wmKXX45",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Telegram Send Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_doctor_config": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_patient": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "register_patient": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_available_appointments": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "book_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_all_appointments": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "reschedule_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cancel_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8469e9b1-5cf8-4e88-a51d-e486e6c9d0fc",
+  "meta": {
+    "instanceId": "9019b83b12a85b4834918d94cfb02cb3423d74a893401ff80ba3c20ad170e68b"
+  },
+  "nodeGroups": [],
+  "id": "yjdMyrRavI0eoZhp",
+  "tags": []
+}

@@ -1,0 +1,357 @@
+{
+  "name": "Tool - Cancel Appointment",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "telegram_user_id"
+            },
+            {
+              "name": "appointment_id"
+            }
+          ]
+        }
+      },
+      "id": "25124ae0-5235-49cf-8259-12c0af5f8026",
+      "name": "Tool Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1IrYW8nNDOxUzUbl2otUE6xfP_8C2r46FvacUp-OTJO0",
+          "cachedResultName": "Doctor Appointment Bot (DEMO DATA)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "850814077",
+          "cachedResultName": "Appointments"
+        },
+        "options": {}
+      },
+      "id": "2bcbfdb4-1274-44d3-987d-c7241b6251a6",
+      "name": "Read Appointments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        96
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z5LxT4GtDPEKH9u8",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction pad(n) { return String(n).padStart(2, '0'); }\nfunction normTime(t) {\n  if (typeof t === 'number') { const m = Math.round(t * 1440); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }\n  const s = String(t == null ? '' : t).trim();\n  const p = s.split(':');\n  if (p.length >= 2 && !isNaN(Number(p[0])) && !isNaN(Number(p[1]))) return pad(Number(p[0])) + ':' + pad(Number(p[1]));\n  return s;\n}\nfunction normDate(d) {\n  if (typeof d === 'number') return new Date(Math.round((d - 25569) * 86400000)).toISOString().slice(0, 10);\n  return String(d == null ? '' : d).trim().slice(0, 10);\n}\nfunction validDate(s) {\n  const p = s.split('-');\n  if (p.length !== 3 || p[0].length !== 4 || p[1].length !== 2 || p[2].length !== 2) return false;\n  const d = new Date(s + 'T00:00:00Z');\n  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;\n}\nfunction validTime(s) {\n  const p = s.split(':');\n  return p.length === 2 && p[0].length === 2 && p[1].length === 2 && !isNaN(Number(p[0])) && !isNaN(Number(p[1])) && Number(p[0]) < 24 && Number(p[1]) < 60;\n}\nconst nowD = new Date(Date.now() + 19800000);\nconst NOW = { date: nowD.toISOString().slice(0, 10), time: nowD.toISOString().slice(11, 16), stamp: nowD.toISOString().slice(0, 19) + '+05:30' };\nconst DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];\nfunction dayName(date) { return DAYS[new Date(date + 'T00:00:00Z').getUTCDay()]; }\nfunction toMin(t) { const p = t.split(':'); return Number(p[0]) * 60 + Number(p[1]); }\nfunction fromMin(m) { return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }\nfunction isActive(v) { return String(v).trim().toUpperCase() === 'TRUE'; }\nfunction rowsOf(name) { return $(name).all().map(i => i.json).filter(j => j && Object.keys(j).length > 0 && !j.error); }\nfunction isLive(a) { const s = String(a.status).toUpperCase(); return s === 'CONFIRMED' || s === 'RESCHEDULED'; }\nfunction docView(d) {\n  return { doctor_id: String(d.doctor_id), doctor_name: d.doctor_name, specialty: d.specialty, consultation_fee: d.consultation_fee, available_days: String(d.available_days), start_time: normTime(d.start_time), end_time: normTime(d.end_time), slot_duration_minutes: Number(d.slot_duration_minutes) };\n}\nfunction gridSlots(d) {\n  const v = docView(d); const o = [];\n  for (let m = toMin(v.start_time); m + v.slot_duration_minutes <= toMin(v.end_time); m += v.slot_duration_minutes) o.push(fromMin(m));\n  return o;\n}\nfunction worksOn(d, date) { return String(d.available_days).split(',').map(x => x.trim().toLowerCase()).includes(dayName(date).toLowerCase()); }\nfunction freeSlots(d, date, appts, ignoreId) {\n  const taken = appts.filter(a => String(a.doctor_id) === String(d.doctor_id) && normDate(a.appointment_date) === date && isLive(a) && String(a.appointment_id) !== String(ignoreId || '')).map(a => normTime(a.appointment_time));\n  return gridSlots(d).filter(s => !taken.includes(s) && !(date === NOW.date && s <= NOW.time));\n}\nfunction specMatch(spec, value) {\n  const a = String(spec).trim().toLowerCase(); const b = String(value).trim().toLowerCase();\n  return b.includes(a) || a.includes(b) || (a.length >= 5 && b.slice(0, 5) === a.slice(0, 5));\n}\nfunction newId(prefix) { return prefix + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase(); }\nfunction out(o) { return [{ json: o }]; }\nfunction fail(status, message, extra) { return out(Object.assign({ ok: false, status: status, message: message }, extra || {})); }\nconst inp = $('Tool Input').first().json;\nconst uid = String(inp.telegram_user_id == null ? '' : inp.telegram_user_id).trim();\n\nconst apptId = String(inp.appointment_id || '').trim();\nif (!uid || !apptId) return fail('INVALID_INPUT', 'Appointment ID is required.');\nconst appt = rowsOf('Read Appointments').find(a => String(a.appointment_id) === apptId && String(a.telegram_user_id) === uid);\nif (!appt) return fail('APPOINTMENT_NOT_FOUND', 'No appointment with that ID was found for your account.');\nif (String(appt.status).toUpperCase() === 'CANCELLED') return fail('ALREADY_CANCELLED', 'That appointment is already cancelled.');\nconst row = { appointment_id: apptId, status: 'CANCELLED', updated_at: NOW.stamp };\nreturn out({ ok: true, row: row, view: { appointment_id: apptId, doctor_name: appt.doctor_name, appointment_date: normDate(appt.appointment_date), appointment_time: normTime(appt.appointment_time), status: 'CANCELLED' }, successMessage: 'Appointment ' + apptId + ' has been cancelled.' });\n"
+      },
+      "id": "5ca41f88-7a7f-45cc-9bc4-300164ab2a7f",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d922ecd0-3224-4adc-8f9b-18801d6640f4",
+      "name": "Is Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1IrYW8nNDOxUzUbl2otUE6xfP_8C2r46FvacUp-OTJO0",
+          "cachedResultName": "Doctor Appointment Bot (DEMO DATA)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "850814077",
+          "cachedResultName": "Appointments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "appointment_id": "={{ $json.row.appointment_id }}",
+            "status": "={{ $json.row.status }}",
+            "updated_at": "={{ $json.row.updated_at }}"
+          },
+          "matchingColumns": [
+            "appointment_id"
+          ],
+          "schema": [
+            {
+              "id": "appointment_id",
+              "displayName": "appointment_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "patient_id",
+              "displayName": "patient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doctor_id",
+              "displayName": "doctor_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "doctor_name",
+              "displayName": "doctor_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "specialty",
+              "displayName": "specialty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "appointment_date",
+              "displayName": "appointment_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "appointment_time",
+              "displayName": "appointment_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "e6144f82-b6e4-4db9-b973-b6b2e8cb2aa9",
+      "name": "Mark Cancelled",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z5LxT4GtDPEKH9u8",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst prev = $('Validate Request').first().json;\nconst r = $input.first().json;\nif (r.error) {\n  return [{ json: { status: 'ERROR', message: 'The Google Sheets write failed, so nothing was saved. Please try again later.' } }];\n}\nreturn [{ json: { status: 'SUCCESS', message: prev.successMessage, record: prev.view || prev.row } }];\n"
+      },
+      "id": "618175ba-7af8-4704-a0fb-b693b17a867b",
+      "name": "Build Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst j = $input.first().json;\nreturn [{ json: { status: j.status, message: j.message, alternatives: j.alternatives || [] } }];\n"
+      },
+      "id": "c5142581-958b-4c1c-ab4f-15d628c61a16",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Read Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointments": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Is Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid": {
+      "main": [
+        [
+          {
+            "node": "Mark Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Cancelled": {
+      "main": [
+        [
+          {
+            "node": "Build Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e03d4fe5-198e-42cf-b4ec-543ecf230d29",
+  "meta": {
+    "instanceId": "9019b83b12a85b4834918d94cfb02cb3423d74a893401ff80ba3c20ad170e68b"
+  },
+  "nodeGroups": [],
+  "id": "z05hGDcrVxGPxj6z",
+  "tags": []
+}

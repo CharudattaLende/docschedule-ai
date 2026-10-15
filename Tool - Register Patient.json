@@ -1,0 +1,305 @@
+{
+  "name": "Tool - Register Patient",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "telegram_user_id"
+            },
+            {
+              "name": "full_name"
+            },
+            {
+              "name": "phone"
+            }
+          ]
+        }
+      },
+      "id": "de2ba73d-9395-4d68-b8d9-07fb27d126be",
+      "name": "Tool Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1IrYW8nNDOxUzUbl2otUE6xfP_8C2r46FvacUp-OTJO0",
+          "cachedResultName": "Doctor Appointment Bot (DEMO DATA)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "881228941",
+          "cachedResultName": "Patients"
+        },
+        "options": {}
+      },
+      "id": "b4bdd5e4-96cb-4629-90b0-7e5b788fda07",
+      "name": "Read Patients",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        96
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z5LxT4GtDPEKH9u8",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction pad(n) { return String(n).padStart(2, '0'); }\nfunction normTime(t) {\n  if (typeof t === 'number') { const m = Math.round(t * 1440); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }\n  const s = String(t == null ? '' : t).trim();\n  const p = s.split(':');\n  if (p.length >= 2 && !isNaN(Number(p[0])) && !isNaN(Number(p[1]))) return pad(Number(p[0])) + ':' + pad(Number(p[1]));\n  return s;\n}\nfunction normDate(d) {\n  if (typeof d === 'number') return new Date(Math.round((d - 25569) * 86400000)).toISOString().slice(0, 10);\n  return String(d == null ? '' : d).trim().slice(0, 10);\n}\nfunction validDate(s) {\n  const p = s.split('-');\n  if (p.length !== 3 || p[0].length !== 4 || p[1].length !== 2 || p[2].length !== 2) return false;\n  const d = new Date(s + 'T00:00:00Z');\n  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;\n}\nfunction validTime(s) {\n  const p = s.split(':');\n  return p.length === 2 && p[0].length === 2 && p[1].length === 2 && !isNaN(Number(p[0])) && !isNaN(Number(p[1])) && Number(p[0]) < 24 && Number(p[1]) < 60;\n}\nconst nowD = new Date(Date.now() + 19800000);\nconst NOW = { date: nowD.toISOString().slice(0, 10), time: nowD.toISOString().slice(11, 16), stamp: nowD.toISOString().slice(0, 19) + '+05:30' };\nconst DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];\nfunction dayName(date) { return DAYS[new Date(date + 'T00:00:00Z').getUTCDay()]; }\nfunction toMin(t) { const p = t.split(':'); return Number(p[0]) * 60 + Number(p[1]); }\nfunction fromMin(m) { return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }\nfunction isActive(v) { return String(v).trim().toUpperCase() === 'TRUE'; }\nfunction rowsOf(name) { return $(name).all().map(i => i.json).filter(j => j && Object.keys(j).length > 0 && !j.error); }\nfunction isLive(a) { const s = String(a.status).toUpperCase(); return s === 'CONFIRMED' || s === 'RESCHEDULED'; }\nfunction docView(d) {\n  return { doctor_id: String(d.doctor_id), doctor_name: d.doctor_name, specialty: d.specialty, consultation_fee: d.consultation_fee, available_days: String(d.available_days), start_time: normTime(d.start_time), end_time: normTime(d.end_time), slot_duration_minutes: Number(d.slot_duration_minutes) };\n}\nfunction gridSlots(d) {\n  const v = docView(d); const o = [];\n  for (let m = toMin(v.start_time); m + v.slot_duration_minutes <= toMin(v.end_time); m += v.slot_duration_minutes) o.push(fromMin(m));\n  return o;\n}\nfunction worksOn(d, date) { return String(d.available_days).split(',').map(x => x.trim().toLowerCase()).includes(dayName(date).toLowerCase()); }\nfunction freeSlots(d, date, appts, ignoreId) {\n  const taken = appts.filter(a => String(a.doctor_id) === String(d.doctor_id) && normDate(a.appointment_date) === date && isLive(a) && String(a.appointment_id) !== String(ignoreId || '')).map(a => normTime(a.appointment_time));\n  return gridSlots(d).filter(s => !taken.includes(s) && !(date === NOW.date && s <= NOW.time));\n}\nfunction specMatch(spec, value) {\n  const a = String(spec).trim().toLowerCase(); const b = String(value).trim().toLowerCase();\n  return b.includes(a) || a.includes(b) || (a.length >= 5 && b.slice(0, 5) === a.slice(0, 5));\n}\nfunction newId(prefix) { return prefix + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase(); }\nfunction out(o) { return [{ json: o }]; }\nfunction fail(status, message, extra) { return out(Object.assign({ ok: false, status: status, message: message }, extra || {})); }\nconst inp = $('Tool Input').first().json;\nconst uid = String(inp.telegram_user_id == null ? '' : inp.telegram_user_id).trim();\n\nconst name = String(inp.full_name || '').trim();\nconst digits = String(inp.phone || '').split('').filter(c => c >= '0' && c <= '9').join('');\nif (!uid) return fail('ERROR', 'Missing Telegram user id.');\nconst existing = rowsOf('Read Patients').find(r => String(r.telegram_user_id) === uid);\nif (existing) return fail('ALREADY_REGISTERED', 'This Telegram user is already registered as ' + existing.full_name + ' (patient ID ' + existing.patient_id + ').');\nif (name.length < 2) return fail('INVALID_NAME', 'Please provide the full name (at least 2 characters).');\nif (digits.length < 10 || digits.length > 15) return fail('INVALID_PHONE', 'Please provide a valid phone number with 10 to 15 digits.');\nconst row = { patient_id: newId('P'), telegram_user_id: uid, full_name: name, phone: digits, created_at: NOW.stamp };\nreturn out({ ok: true, row: row, successMessage: 'Registration saved. Patient ID ' + row.patient_id + '.' });\n"
+      },
+      "id": "ba13b647-f492-482d-b0c9-1eea278de8f3",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "574e9487-8dfa-4071-be9c-81f54c05ed2a",
+      "name": "Is Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1IrYW8nNDOxUzUbl2otUE6xfP_8C2r46FvacUp-OTJO0",
+          "cachedResultName": "Doctor Appointment Bot (DEMO DATA)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "881228941",
+          "cachedResultName": "Patients"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "patient_id": "={{ $json.row.patient_id }}",
+            "telegram_user_id": "={{ $json.row.telegram_user_id }}",
+            "full_name": "={{ $json.row.full_name }}",
+            "phone": "={{ $json.row.phone }}",
+            "created_at": "={{ $json.row.created_at }}"
+          },
+          "schema": [
+            {
+              "id": "patient_id",
+              "displayName": "patient_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telegram_user_id",
+              "displayName": "telegram_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "39af02bf-6979-457f-b167-d925bb3c3ad2",
+      "name": "Save Patient",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z5LxT4GtDPEKH9u8",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst prev = $('Validate Request').first().json;\nconst r = $input.first().json;\nif (r.error) {\n  return [{ json: { status: 'ERROR', message: 'The Google Sheets write failed, so nothing was saved. Please try again later.' } }];\n}\nreturn [{ json: { status: 'SUCCESS', message: prev.successMessage, record: prev.view || prev.row } }];\n"
+      },
+      "id": "d6a5adc7-78e3-403a-b8e2-ce157fa8444c",
+      "name": "Build Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst j = $input.first().json;\nreturn [{ json: { status: j.status, message: j.message, alternatives: j.alternatives || [] } }];\n"
+      },
+      "id": "a29973ff-16f7-49ec-a738-9fdc1800efae",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Read Patients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Patients": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Is Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid": {
+      "main": [
+        [
+          {
+            "node": "Save Patient",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Patient": {
+      "main": [
+        [
+          {
+            "node": "Build Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5c71385d-ef5b-4383-8fac-d62637573f62",
+  "meta": {
+    "instanceId": "9019b83b12a85b4834918d94cfb02cb3423d74a893401ff80ba3c20ad170e68b"
+  },
+  "nodeGroups": [],
+  "id": "zWIuDG74VO88dT1P",
+  "tags": []
+}

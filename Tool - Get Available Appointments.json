@@ -1,0 +1,157 @@
+{
+  "name": "Tool - Get Available Appointments",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "doctor_id"
+            },
+            {
+              "name": "specialty"
+            },
+            {
+              "name": "appointment_date"
+            }
+          ]
+        }
+      },
+      "id": "56347eef-6abc-47a9-8029-5d87e7188351",
+      "name": "Tool Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1IrYW8nNDOxUzUbl2otUE6xfP_8C2r46FvacUp-OTJO0",
+          "cachedResultName": "Doctor Appointment Bot (DEMO DATA)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "76990137",
+          "cachedResultName": "Doctors"
+        },
+        "options": {}
+      },
+      "id": "373ed49b-410d-4873-bbe0-372974442cc9",
+      "name": "Read Doctors",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z5LxT4GtDPEKH9u8",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "1IrYW8nNDOxUzUbl2otUE6xfP_8C2r46FvacUp-OTJO0",
+          "cachedResultName": "Doctor Appointment Bot (DEMO DATA)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "850814077",
+          "cachedResultName": "Appointments"
+        },
+        "options": {}
+      },
+      "id": "887b5154-286e-4717-9798-596ecc324cf9",
+      "name": "Read Appointments",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        448,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "z5LxT4GtDPEKH9u8",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction pad(n) { return String(n).padStart(2, '0'); }\nfunction normTime(t) {\n  if (typeof t === 'number') { const m = Math.round(t * 1440); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }\n  const s = String(t == null ? '' : t).trim();\n  const p = s.split(':');\n  if (p.length >= 2 && !isNaN(Number(p[0])) && !isNaN(Number(p[1]))) return pad(Number(p[0])) + ':' + pad(Number(p[1]));\n  return s;\n}\nfunction normDate(d) {\n  if (typeof d === 'number') return new Date(Math.round((d - 25569) * 86400000)).toISOString().slice(0, 10);\n  return String(d == null ? '' : d).trim().slice(0, 10);\n}\nfunction validDate(s) {\n  const p = s.split('-');\n  if (p.length !== 3 || p[0].length !== 4 || p[1].length !== 2 || p[2].length !== 2) return false;\n  const d = new Date(s + 'T00:00:00Z');\n  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;\n}\nfunction validTime(s) {\n  const p = s.split(':');\n  return p.length === 2 && p[0].length === 2 && p[1].length === 2 && !isNaN(Number(p[0])) && !isNaN(Number(p[1])) && Number(p[0]) < 24 && Number(p[1]) < 60;\n}\nconst nowD = new Date(Date.now() + 19800000);\nconst NOW = { date: nowD.toISOString().slice(0, 10), time: nowD.toISOString().slice(11, 16), stamp: nowD.toISOString().slice(0, 19) + '+05:30' };\nconst DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];\nfunction dayName(date) { return DAYS[new Date(date + 'T00:00:00Z').getUTCDay()]; }\nfunction toMin(t) { const p = t.split(':'); return Number(p[0]) * 60 + Number(p[1]); }\nfunction fromMin(m) { return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }\nfunction isActive(v) { return String(v).trim().toUpperCase() === 'TRUE'; }\nfunction rowsOf(name) { return $(name).all().map(i => i.json).filter(j => j && Object.keys(j).length > 0 && !j.error); }\nfunction isLive(a) { const s = String(a.status).toUpperCase(); return s === 'CONFIRMED' || s === 'RESCHEDULED'; }\nfunction docView(d) {\n  return { doctor_id: String(d.doctor_id), doctor_name: d.doctor_name, specialty: d.specialty, consultation_fee: d.consultation_fee, available_days: String(d.available_days), start_time: normTime(d.start_time), end_time: normTime(d.end_time), slot_duration_minutes: Number(d.slot_duration_minutes) };\n}\nfunction gridSlots(d) {\n  const v = docView(d); const o = [];\n  for (let m = toMin(v.start_time); m + v.slot_duration_minutes <= toMin(v.end_time); m += v.slot_duration_minutes) o.push(fromMin(m));\n  return o;\n}\nfunction worksOn(d, date) { return String(d.available_days).split(',').map(x => x.trim().toLowerCase()).includes(dayName(date).toLowerCase()); }\nfunction freeSlots(d, date, appts, ignoreId) {\n  const taken = appts.filter(a => String(a.doctor_id) === String(d.doctor_id) && normDate(a.appointment_date) === date && isLive(a) && String(a.appointment_id) !== String(ignoreId || '')).map(a => normTime(a.appointment_time));\n  return gridSlots(d).filter(s => !taken.includes(s) && !(date === NOW.date && s <= NOW.time));\n}\nfunction specMatch(spec, value) {\n  const a = String(spec).trim().toLowerCase(); const b = String(value).trim().toLowerCase();\n  return b.includes(a) || a.includes(b) || (a.length >= 5 && b.slice(0, 5) === a.slice(0, 5));\n}\nfunction newId(prefix) { return prefix + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase(); }\nfunction out(o) { return [{ json: o }]; }\nfunction fail(status, message, extra) { return out(Object.assign({ ok: false, status: status, message: message }, extra || {})); }\nconst inp = $('Tool Input').first().json;\nconst uid = String(inp.telegram_user_id == null ? '' : inp.telegram_user_id).trim();\n\nconst docId = String(inp.doctor_id || '').trim();\nconst spec = String(inp.specialty || '').trim();\nconst date = normDate(inp.appointment_date);\nif (!docId && !spec) return out({ status: 'ERROR', message: 'Provide a doctor_id or a specialty.' });\nif (!validDate(date)) return out({ status: 'INVALID_DATE', message: 'The date must be a real calendar date in YYYY-MM-DD format.' });\nif (date < NOW.date) return out({ status: 'PAST_TIME', message: 'That date has already passed.' });\nlet docs = rowsOf('Read Doctors').filter(d => isActive(d.active));\nif (docId) docs = docs.filter(d => String(d.doctor_id) === docId); else docs = docs.filter(d => specMatch(spec, d.specialty));\nif (!docs.length) return out({ status: 'NOT_FOUND', message: 'No matching active doctor found.' });\nconst appts = rowsOf('Read Appointments');\nconst result = docs.map(d => {\n  const works = worksOn(d, date);\n  return { doctor_id: String(d.doctor_id), doctor_name: d.doctor_name, specialty: d.specialty, consultation_fee: d.consultation_fee, works_that_day: works, free_slots: works ? freeSlots(d, date, appts) : [] };\n});\nconst any = result.some(r => r.free_slots.length > 0);\nreturn out({ status: any ? 'SUCCESS' : 'NO_SLOTS', date: date, weekday: dayName(date), message: any ? 'Free slots listed per doctor.' : 'No free slots on that date. Try another date.', doctors: result });\n"
+      },
+      "id": "bf86b041-1c2c-43ac-867f-d86129384e55",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Read Doctors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Doctors": {
+      "main": [
+        [
+          {
+            "node": "Read Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointments": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "94e39675-1289-43e2-b577-67d70ab809be",
+  "meta": {
+    "instanceId": "9019b83b12a85b4834918d94cfb02cb3423d74a893401ff80ba3c20ad170e68b"
+  },
+  "nodeGroups": [],
+  "id": "FZXrTTOdlQIgXBZ4",
+  "tags": []
+}
