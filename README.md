@@ -4,8 +4,17 @@
 
 DocSchedule AI is an automation project that helps users register as patients, discover doctors, check appointment availability, book appointments, and manage existing bookings through a conversational Telegram interface.
 
-<!-- Add the project banner here after uploading it as assets/docschedule-banner.png -->
 ![DocSchedule AI Banner](assets/docschedule-banner.png)
+
+## 🤖 Live Demo
+
+Try DocSchedule AI directly on Telegram!
+
+👉 **[Chat with DocSchedule AI](https://t.me/DoctorAppointmentBotAssistantbot)**
+
+Start the bot with `/start` to explore patient registration, doctor search, appointment availability, booking, rescheduling, and cancellation.
+
+> **Note:** This educational demo uses fictional doctor and patient data.
 
 ## ✨ Features
 
@@ -36,31 +45,37 @@ DocSchedule AI is an automation project that helps users register as patients, d
 5. Availability is checked before booking or rescheduling.
 6. The workflow updates Google Sheets and returns the result to the user.
 
+## 📸 Project Screenshots
+
+### 1. n8n Workflow Architecture
+
+The main automation workflow connects the AI assistant with Telegram and the supporting appointment-management tools.
+
+![DocSchedule AI n8n Workflow](https://github.com/CharudattaLende/docschedule-ai/blob/main/Screenshot%202026-10-15%20200721.png?raw=true)
+
+### 2. Telegram Bot Conversation
+
+A demonstration of the DocSchedule AI conversational interface.
+
+![DocSchedule AI Telegram Conversation](https://github.com/CharudattaLende/docschedule-ai/blob/main/Screenshot%202026-10-15%20213515.png?raw=true)
+
 ## 📂 Repository Structure
+
+The repository currently contains the main Telegram workflow and separate tool workflows.
 
 ```text
 docschedule-ai/
-├── assets/
-│   └── docschedule-banner.png
-├── workflow/
-│   └── Doctor Appointment Telegram Bot.json
-├── tools/
-│   ├── Tool - Book Appointment.json
-│   ├── Tool - Cancel Appointment.json
-│   ├── Tool - Get All Appointments.json
-│   ├── Tool - Get Available Appointments.json
-│   ├── Tool - Get Doctor Config.json
-│   ├── Tool - Get Patient.json
-│   ├── Tool - Register Patient.json
-│   └── Tool - Reschedule Appointment.json
-├── sample-data/
-│   ├── doctors.csv
-│   ├── patients.csv
-│   └── appointments.csv
+├── Doctor Appointment Telegram Bot.json
+├── Tool - Book Appointment.json
+├── Tool - Cancel Appointment.json
+├── Tool - Get All Appointments.json
+├── Tool - Get Available Appointments.json
+├── Tool - Get Doctor Config.json
+├── Tool - Get Patient.json
+├── Tool - Register Patient.json
+├── Tool - Reschedule Appointment.json
 └── README.md
 ```
-
-*The folders above describe the recommended organization. Arrange your existing JSON files into these folders as needed.*
 
 ## 🚀 Setup Instructions
 
@@ -73,41 +88,28 @@ docschedule-ai/
 
 ### Installation
 
-1. Download or clone this repository.
+1. Clone or download this repository.
 2. Import the main workflow JSON into n8n.
 3. Import the individual tool workflows if they are separate workflows.
 4. Configure your own Telegram, Google Sheets, and Gemini credentials.
-5. Connect the workflows and configure any required workflow IDs or tool references.
-6. Create a Google Sheets document using the expected column headers.
+5. Connect the tools and configure any required workflow IDs or references.
+6. Create a Google Sheets document with the expected column headers.
 7. Test patient registration, doctor search, booking, rescheduling, and cancellation.
 
-**Important:** Imported workflows may require credential setup and configuration changes before they work. Never publish API keys, bot tokens, webhook secrets, or real patient information.
-
-## 🤖 Live Demo
-
-Try **DocSchedule AI** directly on Telegram!
-
-👉 **[Chat with DocSchedule AI](https://t.me/DoctorAppointmentBotAssistantbot)**
-
-Start the bot with `/start` to explore patient registration, doctor search, appointment availability, booking, rescheduling, and cancellation.
-
-**Note:** This is an educational demo using fictional doctor and patient data.
+**Important:** Imported workflows may require configuration before they work. Never publish API keys, bot tokens, webhook secrets, or real patient information.
 
 ## 🧪 Demo and Testing
 
 This project uses fictional doctor and patient data for demonstration.
 
 Test scenarios include:
+
 - Registering a new patient
 - Finding a doctor by specialty
 - Checking available time slots
 - Booking an appointment
 - Rescheduling an existing appointment
 - Cancelling an appointment
-
-
-
-
 
 ## 🔒 Disclaimer
 
@@ -119,7 +121,8 @@ This is an educational automation project, not a production-ready healthcare sys
 
 Computer Science Engineering Student | AI Automation & Software Development
 
-
+- GitHub: [CharudattaLende](https://github.com/CharudattaLende)
+- Portfolio: [charudattaportfolio.vercel.app](https://charudattaportfolio.vercel.app/)
 
 ---
 
